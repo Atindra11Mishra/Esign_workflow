@@ -1,0 +1,120 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WorkflowStatus {
+  DRAFT
+  PENDING_ROLE_2_SIGNATURE
+  ROLE_2_COMPLETED_AWAITING_ROLE_3_EMAIL
+  PENDING_ROLE_3_SIGNATURE
+  COMPLETED
+  DECLINED
+  FAILED
+}
+
+enum SignerRole {
+  ROLE_2
+  ROLE_3
+}
+
+enum SignerStatus {
+  AWAITING
+  SENT
+  COMPLETED
+  DECLINED
+}
+
+enum SignatureFieldType {
+  SIGNATURE
+  INITIALS
+  DATE
+  TEXT
+}
+
+model Document {
+  id             String     @id @default(uuid())
+  originalName   String
+  storedName     String
+  mimeType       String
+  sizeBytes      Int
+  storagePath    String
+  uploadedBy     String
+  uploadedAt     DateTime   @default(now())
+  workflows      Workflow[]
+}
+
+model Workflow {
+  id                String            @id @default(uuid())
+  documentId        String
+  role1Email        String
+  status            WorkflowStatus    @default(DRAFT)
+  currentSignerRole SignerRole?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  completedAt       DateTime?
+  document          Document          @relation(fields: [documentId], references: [id])
+  signers           Signer[]
+  signatureTags     SignatureTag[]
+  auditEvents       AuditEvent[]
+  esignSubmission   ESignSubmission?
+}
+
+model Signer {
+  id                 String       @id @default(uuid())
+  workflowId         String
+  role               SignerRole
+  email              String
+  placeholder        Boolean      @default(false)
+  status             SignerStatus @default(AWAITING)
+  signingOrder       Int
+  docusealSubmitterId String?
+  completedAt        DateTime?
+  workflow           Workflow     @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, role])
+}
+
+model SignatureTag {
+  id         String             @id @default(uuid())
+  workflowId String
+  role       SignerRole
+  type       SignatureFieldType
+  page       Int
+  x          Float
+  y          Float
+  width      Float
+  height     Float
+  label      String?
+  required   Boolean            @default(true)
+  createdAt  DateTime           @default(now())
+  workflow   Workflow           @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+}
+
+model ESignSubmission {
+  id                    String   @id @default(uuid())
+  workflowId            String   @unique
+  provider              String
+  providerSubmissionId  String
+  submissionUrl         String?
+  signedDocumentUrl     String?
+  auditLogUrl           String?
+  rawResponse           Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  workflow              Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id          String   @id @default(uuid())
+  workflowId  String
+  eventType   String
+  message     String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  workflow    Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+}
