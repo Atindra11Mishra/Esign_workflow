@@ -1,11 +1,14 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { SignerRole, SignerStatus, WorkflowStatus } from '@prisma/client';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
 import { DOCUSEAL_PROVIDER } from '../common/constants';
 import { DocumentsService } from '../documents/documents.service';
 import { EsignProvider } from '../esign/esign.types';
 import { PrismaService } from '../prisma/prisma.service';
 import { AddSignatureTagsDto } from './dto/add-signature-tags.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
+import { SignedPdfService } from './signed-pdf.service';
 
 @Injectable()
 export class WorkflowsService {
@@ -13,6 +16,7 @@ export class WorkflowsService {
     private readonly prisma: PrismaService,
     private readonly documentsService: DocumentsService,
     @Inject(DOCUSEAL_PROVIDER) private readonly esignProvider: EsignProvider,
+    private readonly signedPdfService: SignedPdfService,
   ) {}
 
   async createWorkflow(dto: CreateWorkflowDto) {
@@ -287,6 +291,28 @@ export class WorkflowsService {
     };
   }
 
+  async getSignedDocumentFile(workflowId: string) {
+    const workflow = await this.findWorkflow(workflowId);
+    if (workflow.status !== WorkflowStatus.COMPLETED) {
+      throw new BadRequestException('Signed PDF is available only after workflow completion.');
+    }
+    if (!workflow.esignSubmission?.signedDocumentUrl) {
+      await this.ensureLocalSignedPdf(workflowId);
+    }
+
+    const refreshed = await this.findWorkflow(workflowId);
+    const filename = `${workflowId}.pdf`;
+    const signedPdfPath = resolve('uploads', 'signed', filename);
+    if (!existsSync(signedPdfPath)) {
+      await this.ensureLocalSignedPdf(workflowId, refreshed);
+    }
+
+    return {
+      path: signedPdfPath,
+      filename,
+    };
+  }
+
   async getStatus(workflowId: string) {
     const workflow = await this.findWorkflow(workflowId);
     return {
@@ -312,6 +338,9 @@ export class WorkflowsService {
       throw new BadRequestException('Role 3 signer is missing.');
     }
 
+    const signedDocumentPath = await this.ensureLocalSignedPdf(workflowId, workflow);
+    const localSignedDocumentUrl = `/workflows/${workflowId}/signed-document/file`;
+
     await this.prisma.$transaction([
       this.prisma.signer.update({
         where: { id: role3.id },
@@ -330,7 +359,7 @@ export class WorkflowsService {
             this.prisma.eSignSubmission.update({
               where: { id: workflow.esignSubmission.id },
               data: {
-                signedDocumentUrl,
+                signedDocumentUrl: localSignedDocumentUrl || signedDocumentPath,
                 auditLogUrl,
               },
             }),
@@ -340,11 +369,27 @@ export class WorkflowsService {
         data: {
           workflowId,
           eventType: 'workflow.completed',
-          message: 'Workflow completed after Role 3 signing.',
-          metadata: { providerReference },
+          message: 'Workflow completed after Role 3 signing and signed PDF was generated.',
+          metadata: { providerReference, signedDocumentUrl: localSignedDocumentUrl },
         },
       }),
     ]);
+  }
+
+  private async ensureLocalSignedPdf(workflowId: string, existingWorkflow?: Awaited<ReturnType<WorkflowsService['findWorkflow']>>) {
+    const workflow = existingWorkflow || (await this.findWorkflow(workflowId));
+    const signedPath = await this.signedPdfService.createSignedPdf(workflow);
+
+    if (workflow.esignSubmission) {
+      await this.prisma.eSignSubmission.update({
+        where: { id: workflow.esignSubmission.id },
+        data: {
+          signedDocumentUrl: `/workflows/${workflowId}/signed-document/file`,
+        },
+      });
+    }
+
+    return signedPath;
   }
 
   private async findWorkflow(workflowId: string) {

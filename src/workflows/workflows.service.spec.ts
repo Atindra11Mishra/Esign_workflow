@@ -14,6 +14,10 @@ describe('WorkflowsService', () => {
     getSignedDocuments: jest.fn(),
   };
 
+  const signedPdfService = {
+    createSignedPdf: jest.fn(),
+  };
+
   const prisma = {
     workflow: {
       findUnique: jest.fn(),
@@ -38,7 +42,12 @@ describe('WorkflowsService', () => {
     $transaction: jest.fn(async (operations: any[]) => Promise.all(operations)),
   };
 
-  const service = new WorkflowsService(prisma as any, documentsService as any, esignProvider);
+  const service = new WorkflowsService(
+    prisma as any,
+    documentsService as any,
+    esignProvider,
+    signedPdfService as any,
+  );
 
   const baseWorkflow = {
     id: 'workflow-1',
@@ -91,6 +100,7 @@ describe('WorkflowsService', () => {
       role2SubmitterId: 'mock-workflow-1-role-2',
       role3SubmitterId: 'mock-workflow-1-role-3',
     });
+    signedPdfService.createSignedPdf.mockResolvedValue('uploads/signed/workflow-1.pdf');
   });
 
   it('does not submit when Role 3 tags are missing', async () => {

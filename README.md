@@ -37,6 +37,32 @@ Open Swagger:
 http://localhost:3000/api/docs
 ```
 
+## Minimal Demo UI
+
+A small React/Vite demo UI is available in `frontend/`. Keep the backend running on port `3000`, then start the UI:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open the Vite URL, usually:
+
+```text
+http://localhost:5173
+```
+
+The UI runs the same workflow as Swagger: upload PDF, create workflow, add tags, submit, simulate Role 2 completion, update Role 3 email, simulate Role 3 completion, show audit events, and open the generated signed PDF.
+
+After completion, use **Open signed PDF** in the UI or call:
+
+```text
+GET /workflows/{workflowId}/signed-document/file
+```
+
+In mock DocuSeal mode, the backend creates a real PDF artifact under `uploads/signed/` with visible Role 2 and Role 3 signature evidence. With a real DocuSeal API key, the provider can be swapped to return the provider-generated signed PDF.
+
 ## Environment
 
 ```env
@@ -102,4 +128,4 @@ npm test
 npm run build
 ```
 
-The tests cover PDF-only upload validation, required signature tags before submission, Role 3 email sequencing, idempotent Role 3 email update, and Role 2/Role 3 completion transitions.
+The tests cover PDF-only upload validation, required signature tags before submission, Role 3 email sequencing, idempotent Role 3 email update, Role 2/Role 3 completion transitions, and one end-to-end HTTP workflow that calls every required endpoint against PostgreSQL.

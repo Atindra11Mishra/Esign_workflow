@@ -71,13 +71,13 @@ export class DocumentsController {
     return this.documentsService.createFromUpload(file, uploadedBy);
   }
 
-  @Get(':id')
+  @Get(':id([0-9a-fA-F-]{36})')
   @ApiOkResponse({ type: DocumentResponseDto })
   async getDocument(@Param('id') id: string) {
     return this.documentsService.findById(id);
   }
 
-  @Get(':id/file')
+  @Get(':id([0-9a-fA-F-]{36})/file')
   async getFile(@Param('id') id: string, @Res() res: Response) {
     const document = await this.documentsService.findById(id);
     const filePath = await this.documentsService.getFilePath(id);

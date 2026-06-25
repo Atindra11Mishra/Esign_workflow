@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Res } from '@nestjs/common';
 import { ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 import { AddSignatureTagsDto } from './dto/add-signature-tags.dto';
 import { CreateWorkflowDto } from './dto/create-workflow.dto';
 import { UpdateRole3EmailDto } from './dto/update-role3-email.dto';
@@ -51,5 +52,16 @@ export class WorkflowsController {
   @ApiOkResponse()
   getSignedDocument(@Param('id') id: string) {
     return this.workflowsService.getSignedDocument(id);
+  }
+
+  @Get(':id/signed-document/file')
+  async downloadSignedDocument(@Param('id') id: string, @Res() res: Response) {
+    const signedDocument = await this.workflowsService.getSignedDocumentFile(id);
+    return res.sendFile(signedDocument.path, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${signedDocument.filename}"`,
+      },
+    });
   }
 }
